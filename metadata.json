@@ -1,0 +1,5 @@
+{
+  "name": "MediRecordatorio AI",
+  "description": "Una aplicación inteligente para organizar y recordar medicamentos. Funciona como una app nativa cuando se añade a la pantalla de inicio.",
+  "requestFramePermissions": []
+}
