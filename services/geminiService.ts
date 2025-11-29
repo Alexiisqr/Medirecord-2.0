@@ -1,14 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { FrequencyType, HistoryLog, MedicationAdvice } from "../types";
+import { FrequencyType, HistoryLog, AICorrectionResult } from "../types";
 
-// Support both process.env (Standard/Cloud) and import.meta.env (Vite/Local)
-const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_API_KEY;
-
-if (!apiKey) {
-  console.error("API KEY not found. Make sure VITE_API_KEY is set in .env or API_KEY in environment variables.");
-}
-
-const ai = new GoogleGenAI({ apiKey: apiKey });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const parseMedicationInstruction = async (instruction: string, existingMeds: string[]) => {
   try {
@@ -16,15 +9,17 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Analiza esta instrucción: "${instruction}". El paciente ya toma: [${existingList}].
-      Extrae datos, cantidad total de pastillas (si se menciona, ej: "caja de 30") y genera recomendaciones.
-      Si hay interacciones peligrosas, adviértelo.`,
+      contents: `Analiza: "${instruction}". Paciente toma: [${existingList}].
+      1. Corrige el nombre del medicamento a su nombre genérico o comercial estándar más probable.
+      2. Extrae dosis y frecuencia.
+      3. Provee una descripción MUY breve (max 6 palabras) de para qué sirve (ej: "Para el dolor de cabeza").`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            name: { type: Type.STRING, description: "Nombre del medicamento" },
+            name: { type: Type.STRING, description: "Nombre corregido y estandarizado (Ej: Acetaminofén)" },
+            description: { type: Type.STRING, description: "Uso principal en máx 6 palabras." },
             dosage: { type: Type.STRING, description: "Dosis (ej: 500mg)" },
             frequencyType: { 
               type: Type.STRING, 
@@ -44,7 +39,7 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
               required: ["food", "sideEffects", "interactions"]
             }
           },
-          required: ["name", "frequencyType", "advice"]
+          required: ["name", "description", "frequencyType", "advice"]
         }
       }
     });
@@ -56,31 +51,41 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
   }
 };
 
-export const getMedicationRisks = async (newMedName: string, existingMeds: string[]): Promise<MedicationAdvice | undefined> => {
+export const getMedicationDetails = async (inputName: string, existingMeds: string[]): Promise<AICorrectionResult | undefined> => {
   try {
     const existingList = existingMeds.length > 0 ? existingMeds.join(", ") : "Ninguno";
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Voy a tomar "${newMedName}". Ya estoy tomando: [${existingList}].
-      Genera un JSON con recomendaciones de seguridad.`,
+      contents: `El usuario quiere agregar el medicamento: "${inputName}".
+      1. Identifica el nombre oficial correcto (ej: si escribe "doli", asume "Doliprane" o "Paracetamol").
+      2. Describe para qué sirve en máx 6 palabras.
+      3. Analiza riesgos con: [${existingList}].`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            food: { type: Type.STRING, description: "¿Con comida o ayunas? (Máx 10 palabras)" },
-            sideEffects: { type: Type.STRING, description: "2-3 efectos secundarios principales" },
-            interactions: { type: Type.STRING, description: "Advertencia de interacciones con la lista provista o 'Ninguna conocida'." }
+            correctedName: { type: Type.STRING, description: "Nombre oficial corregido" },
+            description: { type: Type.STRING, description: "Uso principal (ej: Analgésico para el dolor)" },
+            advice: {
+              type: Type.OBJECT,
+              properties: {
+                food: { type: Type.STRING, description: "¿Con comida o ayunas? (Máx 10 palabras)" },
+                sideEffects: { type: Type.STRING, description: "2-3 efectos secundarios principales" },
+                interactions: { type: Type.STRING, description: "Interacciones con otros medicamentos o 'Ninguna'." }
+              },
+              required: ["food", "sideEffects", "interactions"]
+            }
           },
-          required: ["food", "sideEffects", "interactions"]
+          required: ["correctedName", "description", "advice"]
         }
       }
     });
 
-    return JSON.parse(response.text) as MedicationAdvice;
+    return JSON.parse(response.text) as AICorrectionResult;
   } catch (error) {
-    console.error("Error getting risks:", error);
+    console.error("Error getting details:", error);
     return undefined;
   }
 };
@@ -91,11 +96,11 @@ export const analyzeHistory = async (logs: HistoryLog[]) => {
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Analiza este historial de medicamentos tomados por un paciente:\n${logsText}\n\nDame un resumen breve (máximo 50 palabras) motivacional sobre su adherencia o indicando si parece constante. Háblale directamente al usuario ("Has estado...").`,
+      contents: `Analiza historial:\n${logsText}\n\nResumen breve (máx 40 palabras) motivacional para el usuario.`,
     });
     return response.text;
   } catch (error) {
     console.error("Error analyzing history:", error);
-    return "No pude analizar el historial en este momento.";
+    return "Sigue así, mantén tu salud bajo control.";
   }
 };

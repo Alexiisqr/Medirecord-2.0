@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: './', // CRITICAL FIX: Allows assets to load from relative paths on Android filesystem
   plugins: [
     react(),
     VitePWA({
