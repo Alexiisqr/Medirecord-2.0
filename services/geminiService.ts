@@ -1,56 +1,63 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { FrequencyType, HistoryLog, MedicationAdvice } from "../types";
 
-// LÓGICA DE API KEY:
-// 1. import.meta.env.VITE_API_KEY -> Estándar para producción en Vite/Vercel/Netlify.
-// 2. process.env.API_KEY -> Estándar para entornos locales o de prueba (AI Studio).
-const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
+// Inicialización segura. Si process.env.API_KEY está vacío (por error de config), 
+// usamos un string vacío para que la app cargue y muestre la alerta visual en lugar de romperse.
+const apiKey = process.env.API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
 
-if (!apiKey) {
-  console.error("CRITICAL: API KEY not found. Please set VITE_API_KEY in your environment variables (Vercel/Netlify) or .env file.");
-}
-
-const ai = new GoogleGenAI({ apiKey: apiKey || "dummy-key-to-prevent-crash" });
-
-// Helper para limpiar respuestas de la IA que incluyen bloques de código markdown
+// Helper para limpiar respuestas de la IA (Más robusto)
 const cleanJson = (text: string) => {
-  return text.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+  if (!text) return "{}";
+  let clean = text.trim();
+  // Eliminar bloques de código markdown, insensible a mayúsculas
+  clean = clean.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/, "");
+  return clean.trim();
+};
+
+// Función para verificar estado desde la UI
+export const checkSystemStatus = () => {
+  // Verificamos si la key tiene longitud válida
+  const hasKey = apiKey.length > 0;
+  return {
+    hasKey,
+    keySource: hasKey ? 'Configurada' : 'Faltante'
+  };
 };
 
 export const parseMedicationInstruction = async (instruction: string, existingMeds: string[]) => {
-  if (!apiKey) return null;
+  if (!apiKey) return { isValid: false, info: "Falta configuración de API Key" };
   
   try {
     const existingList = existingMeds.length > 0 ? existingMeds.join(", ") : "Ninguno";
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Analiza esta instrucción: "${instruction}". El paciente ya toma: [${existingList}].
-      Si el nombre del medicamento está mal escrito, corrígelo al nombre genérico o comercial más probable.
-      IMPORTANTE: Responde SOLO con el JSON raw, sin markdown.`,
+      contents: `Analiza: "${instruction}". Contexto actual: [${existingList}].
+      Si hay errores ortográficos, asume el medicamento más probable.
+      Responde SOLO el JSON raw, sin markdown.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            isValid: { type: Type.BOOLEAN, description: "True si es una instrucción válida sobre medicamentos. False si es texto sin sentido o no relacionado a salud." },
-            name: { type: Type.STRING, description: "Nombre corregido y estandarizado del medicamento" },
-            description: { type: Type.STRING, description: "Breve explicación (máx 15 palabras) de para qué sirve este medicamento." },
-            dosage: { type: Type.STRING, description: "Dosis (ej: 500mg)" },
+            isValid: { type: Type.BOOLEAN },
+            name: { type: Type.STRING },
+            description: { type: Type.STRING },
+            dosage: { type: Type.STRING },
             frequencyType: { 
               type: Type.STRING, 
-              enum: [FrequencyType.DAILY, FrequencyType.HOURLY, FrequencyType.WEEKLY, FrequencyType.AS_NEEDED],
-              description: "Tipo de frecuencia"
+              enum: [FrequencyType.DAILY, FrequencyType.HOURLY, FrequencyType.WEEKLY, FrequencyType.AS_NEEDED]
             },
-            frequencyValue: { type: Type.NUMBER, description: "Valor numérico de la frecuencia" },
-            info: { type: Type.STRING, description: "Nota breve" },
-            inventory: { type: Type.NUMBER, description: "Cantidad total de pastillas si se menciona (default 20 si no)" },
+            frequencyValue: { type: Type.NUMBER },
+            info: { type: Type.STRING },
+            inventory: { type: Type.NUMBER },
             advice: {
               type: Type.OBJECT,
               properties: {
-                food: { type: Type.STRING, description: "¿Con comida o ayunas? (Máx 10 palabras)" },
-                sideEffects: { type: Type.STRING, description: "2-3 efectos secundarios principales" },
-                interactions: { type: Type.STRING, description: "Advertencia de interacciones con la lista provista o 'Ninguna conocida'." }
+                food: { type: Type.STRING },
+                sideEffects: { type: Type.STRING },
+                interactions: { type: Type.STRING }
               },
               required: ["food", "sideEffects", "interactions"]
             }
@@ -60,21 +67,24 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
       }
     });
 
-    const parsed = JSON.parse(cleanJson(response.text));
+    const text = response.text;
+    if (!text) throw new Error("Respuesta vacía de la IA");
+    
+    const parsed = JSON.parse(cleanJson(text));
     return parsed;
   } catch (error) {
-    console.error("Error parsing medication with Gemini:", error);
-    return null;
+    console.error("Error Gemini Parse:", error);
+    return { isValid: false, info: "Error al procesar. Intenta escribirlo manualmente." };
   }
 };
 
 export const analyzeMedicationDetails = async (rawName: string, existingMeds: string[]) => {
   if (!apiKey) {
     return {
-      isMedication: true, 
+      isMedication: true, // Permitir pasar para no bloquear al usuario si falla la API, pero avisar
       correctedName: rawName,
-      description: "Error de conexión",
-      validationMessage: "No se detectó API KEY.",
+      description: "Modo Offline",
+      validationMessage: "API Key no configurada. Funcionando en modo manual.",
       advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
     };
   }
@@ -84,26 +94,26 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `El usuario quiere agregar "${rawName}".
-      1. Determina si "${rawName}" es un medicamento real, suplemento o insumo médico válido. Si es algo como "piedra", "carro", "frijol", marca isMedication como false.
-      2. Si es válido, corrige el nombre y da detalles.
-      3. Analiza riesgos con: [${existingList}].
-      IMPORTANTE: Responde SOLO con el JSON raw, sin markdown.`,
+      contents: `Validar adición de: "${rawName}".
+      1. ¿Es un medicamento/suplemento real? (isMedication).
+      2. Corrige nombre y da detalles.
+      3. Revisa cruces con: [${existingList}].
+      JSON raw solamente.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            isMedication: { type: Type.BOOLEAN, description: "Es TRUE si es un medicamento, vitamina o tratamiento real. FALSE si es una palabra aleatoria, comida o tontería." },
-            validationMessage: { type: Type.STRING, description: "Si no es medicamento, explica por qué brevemente. Ej: 'Una piedra no se puede recetar'." },
-            correctedName: { type: Type.STRING, description: "Nombre oficial/correcto del medicamento" },
-            description: { type: Type.STRING, description: "Explicación sencilla de su uso (Máx 12 palabras)" },
+            isMedication: { type: Type.BOOLEAN },
+            validationMessage: { type: Type.STRING },
+            correctedName: { type: Type.STRING },
+            description: { type: Type.STRING },
             advice: {
               type: Type.OBJECT,
               properties: {
-                food: { type: Type.STRING, description: "¿Con comida o ayunas?" },
-                sideEffects: { type: Type.STRING, description: "Efectos secundarios breves" },
-                interactions: { type: Type.STRING, description: "Interacciones detectadas" }
+                food: { type: Type.STRING },
+                sideEffects: { type: Type.STRING },
+                interactions: { type: Type.STRING }
               },
               required: ["food", "sideEffects", "interactions"]
             }
@@ -116,29 +126,28 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
     const parsed = JSON.parse(cleanJson(response.text));
     return parsed;
   } catch (error) {
-    console.error("Error analyzing details:", error);
+    console.error("Error Gemini Analyze:", error);
+    // Fallback seguro
     return {
       isMedication: true, 
       correctedName: rawName,
-      description: "Medicamento",
+      description: "Sin conexión IA",
       advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
     };
   }
 };
 
 export const analyzeHistory = async (logs: HistoryLog[]) => {
-  if (!apiKey) return "Error: API Key no configurada.";
+  if (!apiKey) return "⚠️ No puedo analizar el historial sin una API Key configurada.";
 
   try {
-    const logsText = logs.map(l => `${l.medicationName} tomado el ${new Date(l.takenAt).toLocaleString()}`).join('\n');
-    
+    const logsText = logs.map(l => `${l.medicationName}: ${l.takenAt}`).join('\n');
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Analiza este historial de medicamentos tomados por un paciente:\n${logsText}\n\nDame un resumen breve (máximo 50 palabras) motivacional sobre su adherencia o indicando si parece constante. Háblale directamente al usuario ("Has estado...").`,
+      contents: `Resumen motivacional breve (30 palabras) para paciente:\n${logsText}`,
     });
     return response.text;
   } catch (error) {
-    console.error("Error analyzing history:", error);
-    return "No pude analizar el historial en este momento.";
+    return "No se pudo conectar con el asistente.";
   }
 };

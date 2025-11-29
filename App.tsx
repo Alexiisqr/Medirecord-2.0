@@ -3,7 +3,7 @@ import { Medication, View, FrequencyType, HistoryLog, Theme, UserStats } from '.
 import { Navigation } from './components/Navigation';
 import { MedicationCard } from './components/MedicationCard';
 import { Button } from './components/Button';
-import { parseMedicationInstruction, analyzeHistory, analyzeMedicationDetails } from './services/geminiService';
+import { parseMedicationInstruction, analyzeHistory, analyzeMedicationDetails, checkSystemStatus } from './services/geminiService';
 import { Sparkles, X, Search, Bell, History, CheckCircle2, Share2, HeartPulse, Palette, Clock, Trophy, Flame, Lock, Unlock, Zap, Download, AlertOctagon } from 'lucide-react';
 
 // THEMES CONFIGURATION
@@ -109,6 +109,7 @@ const App: React.FC = () => {
   const [aiInput, setAiInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [systemStatus, setSystemStatus] = useState({ hasKey: true, keySource: '' });
   
   // Manual Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -135,6 +136,15 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('theme', currentThemeId); }, [currentThemeId]);
   useEffect(() => { localStorage.setItem('userStats', JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem('unlockedThemes', JSON.stringify(unlockedThemes)); }, [unlockedThemes]);
+
+  // Check Status on Mount
+  useEffect(() => {
+    const status = checkSystemStatus();
+    setSystemStatus(status);
+    if (!status.hasKey) {
+      console.warn("⚠️ Aplicación corriendo sin API Key. Las funciones de IA estarán deshabilitadas.");
+    }
+  }, []);
 
   // Handle Install Prompt
   useEffect(() => {
@@ -331,11 +341,16 @@ const App: React.FC = () => {
 
   const handleAiAdd = async () => {
     if (!aiInput.trim()) return;
+    if (!systemStatus.hasKey) {
+      alert("❌ Error de Configuración: No se detectó la VITE_API_KEY. Configúrala en Vercel para usar la IA.");
+      return;
+    }
+
     setIsAiLoading(true);
     const existingMedsList = medications.map(m => m.name);
     const result = await parseMedicationInstruction(aiInput, existingMedsList);
     
-    if (result && result.isValid !== false) { // Check isValid property
+    if (result && result.isValid) {
       const now = new Date();
       const newMed: Medication = {
         id: crypto.randomUUID(),
@@ -357,7 +372,7 @@ const App: React.FC = () => {
       setShowAiModal(false);
       setView('dashboard');
     } else {
-      alert("No entendí la instrucción o no parece un medicamento válido.");
+      alert(result?.info || "No pude entender la instrucción. Intenta ser más claro.");
     }
     setIsAiLoading(false);
   };
@@ -374,7 +389,6 @@ const App: React.FC = () => {
     startDateTime.setHours(hours, minutes, 0, 0);
 
     if (editingId) {
-      // Logic for editing (skip heavy AI validation if simply editing)
       setMedications(prev => prev.map(m => {
         if (m.id === editingId) {
           const updatedNextDose = new Date();
@@ -393,15 +407,27 @@ const App: React.FC = () => {
         return m;
       }));
     } else {
-      // Logic for NEW medication (Validate with AI)
-      const existingMedsList = medications.map(m => m.name);
-      const details = await analyzeMedicationDetails(newName, existingMedsList);
+      // Logic for NEW medication
+      let details;
+      
+      // Si tenemos key, usamos IA. Si no, fallback manual.
+      if (systemStatus.hasKey) {
+         const existingMedsList = medications.map(m => m.name);
+         details = await analyzeMedicationDetails(newName, existingMedsList);
+      } else {
+         details = { 
+           isMedication: true, 
+           correctedName: newName, 
+           description: "Agregado manual", 
+           advice: { food: "Sin datos", sideEffects: "-", interactions: "-" } 
+         };
+      }
 
       // RESTRICTION CHECK
       if (details.isMedication === false) {
         setIsManualLoading(false);
-        alert(`⚠️ No se pudo agregar:\n\n"${newName}" no parece ser un medicamento válido.\n\nMotivo: ${details.validationMessage || "Entrada no reconocida."}`);
-        return; // STOP EXECUTION
+        alert(`⚠️ Bloqueado: "${newName}" no parece ser un medicamento válido.\n\nMotivo: ${details.validationMessage || "Entrada no reconocida."}`);
+        return; 
       }
 
       const newMed: Medication = {
@@ -486,6 +512,20 @@ const App: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* ALERT BOX SI NO HAY API KEY */}
+      {!systemStatus.hasKey && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3 items-start animate-pulse">
+           <AlertOctagon className="text-red-500 shrink-0 mt-0.5" size={20} />
+           <div>
+              <h4 className="font-bold text-red-700 text-sm">Error de Configuración</h4>
+              <p className="text-xs text-red-600 mt-1">
+                 La <strong>VITE_API_KEY</strong> no está configurada en Vercel. La IA no funcionará. 
+                 <br/><span className="opacity-75">Ve a Settings → Environment Variables en Vercel.</span>
+              </p>
+           </div>
+        </div>
+      )}
 
       {/* Hero Card */}
       <div className={`rounded-3xl p-6 relative overflow-hidden shadow-2xl transition-all duration-300 ${theme.id === 'cyber' ? 'bg-gradient-to-r from-purple-900 to-blue-900 border border-cyan-500/30' : 'bg-gradient-to-r from-blue-600 to-indigo-600'} text-white`}>
@@ -784,6 +824,9 @@ const App: React.FC = () => {
            MediRecord v2.2<br/>
            Versión Gamificada
          </p>
+         <div className="mt-4 pt-4 border-t text-xs text-slate-400">
+           Estado IA: <span className={systemStatus.hasKey ? "text-green-500 font-bold" : "text-red-500 font-bold"}>{systemStatus.keySource}</span>
+         </div>
       </div>
     </div>
   );
