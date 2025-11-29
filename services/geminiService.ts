@@ -17,14 +17,15 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Analiza esta instrucción: "${instruction}". El paciente ya toma: [${existingList}].
-      Extrae datos, cantidad total de pastillas (si se menciona, ej: "caja de 30") y genera recomendaciones.
-      Si hay interacciones peligrosas, adviértelo.`,
+      Si el nombre del medicamento está mal escrito, corrígelo al nombre genérico o comercial más probable.
+      Extrae datos y genera recomendaciones.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            name: { type: Type.STRING, description: "Nombre del medicamento" },
+            name: { type: Type.STRING, description: "Nombre corregido y estandarizado del medicamento" },
+            description: { type: Type.STRING, description: "Breve explicación (máx 15 palabras) de para qué sirve este medicamento." },
             dosage: { type: Type.STRING, description: "Dosis (ej: 500mg)" },
             frequencyType: { 
               type: Type.STRING, 
@@ -56,32 +57,46 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
   }
 };
 
-export const getMedicationRisks = async (newMedName: string, existingMeds: string[]): Promise<MedicationAdvice | undefined> => {
+export const analyzeMedicationDetails = async (rawName: string, existingMeds: string[]) => {
   try {
     const existingList = existingMeds.length > 0 ? existingMeds.join(", ") : "Ninguno";
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Voy a tomar "${newMedName}". Ya estoy tomando: [${existingList}].
-      Genera un JSON con recomendaciones de seguridad.`,
+      contents: `El usuario quiere agregar "${rawName}".
+      1. Corrige el nombre si tiene errores ortográficos o está incompleto (Ej: "ibupro" -> "Ibuprofeno").
+      2. Dame una descripción corta (para qué sirve).
+      3. Analiza riesgos con: [${existingList}].`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            food: { type: Type.STRING, description: "¿Con comida o ayunas? (Máx 10 palabras)" },
-            sideEffects: { type: Type.STRING, description: "2-3 efectos secundarios principales" },
-            interactions: { type: Type.STRING, description: "Advertencia de interacciones con la lista provista o 'Ninguna conocida'." }
+            correctedName: { type: Type.STRING, description: "Nombre oficial/correcto del medicamento" },
+            description: { type: Type.STRING, description: "Explicación sencilla de su uso (Máx 12 palabras)" },
+            advice: {
+              type: Type.OBJECT,
+              properties: {
+                food: { type: Type.STRING, description: "¿Con comida o ayunas?" },
+                sideEffects: { type: Type.STRING, description: "Efectos secundarios breves" },
+                interactions: { type: Type.STRING, description: "Interacciones detectadas" }
+              },
+              required: ["food", "sideEffects", "interactions"]
+            }
           },
-          required: ["food", "sideEffects", "interactions"]
+          required: ["correctedName", "description", "advice"]
         }
       }
     });
 
-    return JSON.parse(response.text) as MedicationAdvice;
+    return JSON.parse(response.text);
   } catch (error) {
-    console.error("Error getting risks:", error);
-    return undefined;
+    console.error("Error analyzing details:", error);
+    return {
+      correctedName: rawName,
+      description: "Medicamento",
+      advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
+    };
   }
 };
 

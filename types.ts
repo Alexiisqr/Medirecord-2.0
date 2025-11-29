@@ -6,39 +6,58 @@ export enum FrequencyType {
 }
 
 export interface MedicationAdvice {
-  food: string; // Instructions regarding food (e.g., after meals)
-  sideEffects: string; // Common side effects
-  interactions: string; // Warnings about interactions with existing meds
+  food: string;
+  sideEffects: string;
+  interactions: string;
 }
 
 export interface Medication {
   id: string;
   name: string;
+  description?: string; // New: AI explanation
   dosage: string;
   frequencyType: FrequencyType;
-  frequencyValue: number; // e.g., every 8 (hours), 1 (time a day)
+  frequencyValue: number;
   notes?: string;
-  startDate: string; // ISO string
+  startDate: string; // ISO string containing the PREFERRED time
   nextDose?: string; // ISO string
   color: string;
   icon: string;
-  advice?: MedicationAdvice; // New field for AI recommendations
-  inventory?: number; // Number of pills left
+  advice?: MedicationAdvice;
+  inventory?: number;
 }
 
 export interface HistoryLog {
   id: string;
   medicationName: string;
-  takenAt: string; // ISO string
+  takenAt: string;
   status: 'taken' | 'skipped';
+  pointsEarned?: number;
 }
 
-export interface AIAnalysisResult {
-  suggestedName?: string;
-  suggestedFrequencyType?: FrequencyType;
-  suggestedFrequencyValue?: number;
-  info?: string;
-  suggestedInventory?: number;
+export interface UserStats {
+  level: number;
+  currentPoints: number;
+  streakDays: number;
+  lastTakenDate?: string;
+  achievementsUnlocked: string[];
 }
 
-export type View = 'dashboard' | 'add' | 'profile';
+export type View = 'dashboard' | 'add' | 'profile' | 'settings' | 'rewards';
+
+export interface Theme {
+  id: string;
+  name: string;
+  price?: number; // Cost in points
+  unlocked?: boolean;
+  classes: {
+    bg: string;
+    textMain: string;
+    textSec: string;
+    card: string;
+    cardBorder: string;
+    primary: string;
+    accent: string;
+    nav: string;
+  };
+}
