@@ -3,7 +3,7 @@ import { Medication, View, FrequencyType, HistoryLog, Theme, UserStats } from '.
 import { Navigation } from './components/Navigation';
 import { MedicationCard } from './components/MedicationCard';
 import { Button } from './components/Button';
-import { parseMedicationInstruction, analyzeHistory, analyzeMedicationDetails, checkSystemStatus } from './services/geminiService';
+import { parseMedicationInstruction, analyzeHistory, analyzeMedicationDetails, checkSystemStatus, regenerateMedicationInfo } from './services/geminiService';
 import { Sparkles, X, Search, Bell, History, CheckCircle2, Share2, HeartPulse, Palette, Clock, Trophy, Flame, Lock, Unlock, Zap, Download, AlertOctagon } from 'lucide-react';
 
 // THEMES CONFIGURATION
@@ -314,6 +314,35 @@ const App: React.FC = () => {
     setMedications(prev => prev.filter(m => m.id !== id));
   };
 
+  const handleRegenerate = async (id: string) => {
+    const med = medications.find(m => m.id === id);
+    if (!med) return;
+
+    if (!systemStatus.hasKey) {
+      alert("No se puede reparar. Falta API Key.");
+      return;
+    }
+
+    const newData = await regenerateMedicationInfo(med.name);
+    
+    if (newData) {
+      setMedications(prev => prev.map(m => {
+        if (m.id === id) {
+          return {
+            ...m,
+            name: newData.correctedName || m.name,
+            description: newData.description || "Actualizado",
+            advice: newData.advice
+          };
+        }
+        return m;
+      }));
+      // Pequeño feedback visual o toast sería ideal, por ahora solo update
+    } else {
+      alert("La IA no pudo mejorar la información. Intenta más tarde.");
+    }
+  };
+
   const handleEdit = (med: Medication) => {
     setEditingId(med.id);
     setNewName(med.name);
@@ -563,6 +592,7 @@ const App: React.FC = () => {
               onDelete={handleDelete}
               onEdit={handleEdit}
               onSnooze={handleSnooze}
+              onRegenerate={handleRegenerate}
               theme={theme}
             />
           ))

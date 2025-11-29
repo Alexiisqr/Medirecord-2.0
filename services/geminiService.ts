@@ -1,28 +1,63 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { FrequencyType, HistoryLog, MedicationAdvice } from "../types";
 
-// Inicialización segura. Si process.env.API_KEY está vacío (por error de config), 
-// usamos un string vacío para que la app cargue y muestre la alerta visual en lugar de romperse.
+// Inicialización segura.
 const apiKey = process.env.API_KEY || "";
 const ai = new GoogleGenAI({ apiKey });
 
-// Helper para limpiar respuestas de la IA (Más robusto)
+// Helper para limpiar respuestas de la IA
 const cleanJson = (text: string) => {
   if (!text) return "{}";
   let clean = text.trim();
-  // Eliminar bloques de código markdown, insensible a mayúsculas
   clean = clean.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/, "");
   return clean.trim();
 };
 
-// Función para verificar estado desde la UI
 export const checkSystemStatus = () => {
-  // Verificamos si la key tiene longitud válida
   const hasKey = apiKey.length > 0;
   return {
     hasKey,
     keySource: hasKey ? 'Configurada' : 'Faltante'
   };
+};
+
+// Nueva función específica para REGENERAR información de un medicamento existente
+export const regenerateMedicationInfo = async (medName: string) => {
+  if (!apiKey) return null;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `El usuario tiene un medicamento llamado "${medName}" pero le falta información detallada.
+      Genera la descripción, consejos y verifica el nombre correcto.
+      Responde SOLO JSON raw.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            correctedName: { type: Type.STRING },
+            description: { type: Type.STRING },
+            advice: {
+              type: Type.OBJECT,
+              properties: {
+                food: { type: Type.STRING },
+                sideEffects: { type: Type.STRING },
+                interactions: { type: Type.STRING }
+              },
+              required: ["food", "sideEffects", "interactions"]
+            }
+          },
+          required: ["correctedName", "description", "advice"]
+        }
+      }
+    });
+
+    return JSON.parse(cleanJson(response.text));
+  } catch (error) {
+    console.error("Error regenerando info:", error);
+    return null;
+  }
 };
 
 export const parseMedicationInstruction = async (instruction: string, existingMeds: string[]) => {
@@ -72,19 +107,22 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
     
     const parsed = JSON.parse(cleanJson(text));
     return parsed;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error Gemini Parse:", error);
-    return { isValid: false, info: "Error al procesar. Intenta escribirlo manualmente." };
+    let msg = "Error al procesar.";
+    if (error.message?.includes("403")) msg = "Error de API Key (403).";
+    if (error.message?.includes("429")) msg = "Límite de cuota excedido.";
+    return { isValid: false, info: msg };
   }
 };
 
 export const analyzeMedicationDetails = async (rawName: string, existingMeds: string[]) => {
   if (!apiKey) {
     return {
-      isMedication: true, // Permitir pasar para no bloquear al usuario si falla la API, pero avisar
+      isMedication: true, 
       correctedName: rawName,
       description: "Modo Offline",
-      validationMessage: "API Key no configurada. Funcionando en modo manual.",
+      validationMessage: "API Key no configurada.",
       advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
     };
   }
@@ -125,13 +163,17 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
 
     const parsed = JSON.parse(cleanJson(response.text));
     return parsed;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error Gemini Analyze:", error);
-    // Fallback seguro
+    // Identificar tipo de error para mostrar al usuario
+    let errorMsg = "Error de conexión IA";
+    if (error.message?.includes("403") || error.message?.includes("API key")) errorMsg = "Error: API Key Inválida";
+    if (error.message?.includes("429")) errorMsg = "Error: Cuota Excedida";
+    
     return {
       isMedication: true, 
       correctedName: rawName,
-      description: "Sin conexión IA",
+      description: errorMsg,
       advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
     };
   }

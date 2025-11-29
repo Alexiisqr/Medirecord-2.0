@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Check, Trash2, AlertCircle, Utensils, Zap, AlertTriangle, ChevronDown, ChevronUp, Edit2, Timer, Package, Info } from 'lucide-react';
+import { Clock, Check, Trash2, AlertCircle, Utensils, Zap, AlertTriangle, ChevronDown, ChevronUp, Edit2, Timer, Package, Info, RefreshCw, Sparkles } from 'lucide-react';
 import { Medication, FrequencyType, Theme } from '../types';
 
 interface MedicationCardProps {
@@ -8,11 +8,20 @@ interface MedicationCardProps {
   onDelete: (id: string) => void;
   onEdit: (med: Medication) => void;
   onSnooze: (id: string, minutes: number) => void;
+  onRegenerate: (id: string) => void; // Nueva prop
   theme: Theme;
 }
 
-export const MedicationCard: React.FC<MedicationCardProps> = ({ medication, onTake, onDelete, onEdit, onSnooze, theme }) => {
+export const MedicationCard: React.FC<MedicationCardProps> = ({ medication, onTake, onDelete, onEdit, onSnooze, onRegenerate, theme }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  const handleRegenerateClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRegenerating(true);
+    await onRegenerate(medication.id);
+    setIsRegenerating(false);
+  };
 
   const getFrequencyText = () => {
     switch (medication.frequencyType) {
@@ -30,13 +39,17 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({ medication, onTa
   };
 
   const due = isDue();
-  // Mostrar botón si hay advice (IA) O si hay notas manuales
   const hasExtendedInfo = !!medication.advice || !!medication.notes;
   const inventory = medication.inventory ?? 0;
   const lowStock = inventory <= 5 && inventory > 0;
   const noStock = inventory === 0;
 
-  // Dynamic colors based on theme mode
+  // Detección de estado de error en la descripción
+  const isErrorState = 
+    medication.description?.includes("Sin conexión") || 
+    medication.description?.includes("Modo Offline") || 
+    medication.description?.includes("Error");
+
   const isDark = theme.id === 'dark' || theme.id === 'cyber';
 
   return (
@@ -51,11 +64,27 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({ medication, onTa
             {lowStock && <span className="flex items-center gap-1 text-[10px] font-bold bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded-full border border-orange-500/20"><AlertTriangle size={10} /> {inventory}</span>}
             {noStock && <span className="flex items-center gap-1 text-[10px] font-bold bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full border border-red-500/20"><AlertCircle size={10} /> Agotado</span>}
           </div>
-          {medication.description && (
-            <p className={`text-xs mt-1 italic opacity-80 ${theme.classes.primary} flex items-center gap-1`}>
-              <Info size={10} /> {medication.description}
-            </p>
-          )}
+          
+          {/* Descripción con opción de reparación */}
+          <div className="flex items-center gap-2 mt-1">
+            {medication.description && (
+              <p className={`text-xs italic opacity-80 ${isErrorState ? 'text-red-500 font-bold' : theme.classes.primary} flex items-center gap-1`}>
+                <Info size={10} /> {medication.description}
+              </p>
+            )}
+            
+            {isErrorState && (
+              <button 
+                onClick={handleRegenerateClick}
+                disabled={isRegenerating}
+                className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded-full font-bold hover:bg-blue-200 transition-colors animate-in fade-in"
+              >
+                {isRegenerating ? <RefreshCw size={10} className="animate-spin" /> : <Sparkles size={10} />}
+                {isRegenerating ? 'Reparando...' : 'Reparar Info'}
+              </button>
+            )}
+          </div>
+
           <p className={`text-sm font-medium mt-1 ${theme.classes.textSec}`}>{medication.dosage}</p>
         </div>
         <div className="flex gap-1">
@@ -79,7 +108,6 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({ medication, onTa
           <Clock size={10} />
           {getFrequencyText()}
         </span>
-        {/* Nota movida al desplegable para evitar truncamiento */}
       </div>
 
       {hasExtendedInfo && (
@@ -121,7 +149,7 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({ medication, onTa
                      <Zap size={14} className="text-purple-500 mt-0.5 shrink-0" />
                      <div><span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-900'}`}>Efectos:</span> {medication.advice.sideEffects}</div>
                   </div>
-               )}
+              )}
 
             </div>
           )}
