@@ -36,7 +36,11 @@ export default defineConfig({
       }
     })
   ],
+  // Eliminamos la definición manual de process.env para permitir que Vite maneje 
+  // las variables de entorno de forma nativa mediante import.meta.env
   define: {
-    'process.env': process.env
+    // Solo definimos process.env.API_KEY si existe en el entorno de build (útil para pruebas locales)
+    // De lo contrario, dejamos que el código use import.meta.env
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
   }
 })

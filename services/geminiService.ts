@@ -1,14 +1,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { FrequencyType, HistoryLog, MedicationAdvice } from "../types";
 
-// Support both process.env (Standard/Cloud) and import.meta.env (Vite/Local)
-const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_API_KEY;
+// LÓGICA DE API KEY:
+// 1. import.meta.env.VITE_API_KEY -> Estándar para producción en Vite/Vercel/Netlify.
+// 2. process.env.API_KEY -> Estándar para entornos locales o de prueba (AI Studio).
+const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
 
 if (!apiKey) {
-  console.error("API KEY not found. Make sure VITE_API_KEY is set in .env or API_KEY in environment variables.");
+  console.error("CRITICAL: API KEY not found. Please set VITE_API_KEY in your environment variables (Vercel/Netlify) or .env file.");
 }
 
-const ai = new GoogleGenAI({ apiKey: apiKey });
+const ai = new GoogleGenAI({ apiKey: apiKey || "dummy-key-to-prevent-crash" });
 
 // Helper para limpiar respuestas de la IA que incluyen bloques de código markdown
 const cleanJson = (text: string) => {
@@ -16,6 +18,8 @@ const cleanJson = (text: string) => {
 };
 
 export const parseMedicationInstruction = async (instruction: string, existingMeds: string[]) => {
+  if (!apiKey) return null;
+  
   try {
     const existingList = existingMeds.length > 0 ? existingMeds.join(", ") : "Ninguno";
     
@@ -65,6 +69,16 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
 };
 
 export const analyzeMedicationDetails = async (rawName: string, existingMeds: string[]) => {
+  if (!apiKey) {
+    return {
+      isMedication: true, 
+      correctedName: rawName,
+      description: "Error de conexión",
+      validationMessage: "No se detectó API KEY.",
+      advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
+    };
+  }
+
   try {
     const existingList = existingMeds.length > 0 ? existingMeds.join(", ") : "Ninguno";
     
@@ -103,8 +117,6 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
     return parsed;
   } catch (error) {
     console.error("Error analyzing details:", error);
-    // Fallback error object but allowing pass-through if API fails heavily, 
-    // though in this case we return isMedication true to avoid blocking the user if API is down
     return {
       isMedication: true, 
       correctedName: rawName,
@@ -115,6 +127,8 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
 };
 
 export const analyzeHistory = async (logs: HistoryLog[]) => {
+  if (!apiKey) return "Error: API Key no configurada.";
+
   try {
     const logsText = logs.map(l => `${l.medicationName} tomado el ${new Date(l.takenAt).toLocaleString()}`).join('\n');
     
