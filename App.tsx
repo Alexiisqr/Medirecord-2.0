@@ -4,7 +4,7 @@ import { Navigation } from './components/Navigation';
 import { MedicationCard } from './components/MedicationCard';
 import { Button } from './components/Button';
 import { parseMedicationInstruction, analyzeHistory, analyzeMedicationDetails } from './services/geminiService';
-import { Sparkles, X, Search, Bell, History, CheckCircle2, Share2, HeartPulse, Palette, Clock, Trophy, Flame, Lock, Unlock, Zap, Download } from 'lucide-react';
+import { Sparkles, X, Search, Bell, History, CheckCircle2, Share2, HeartPulse, Palette, Clock, Trophy, Flame, Lock, Unlock, Zap, Download, AlertOctagon } from 'lucide-react';
 
 // THEMES CONFIGURATION
 const THEMES: Record<string, Theme> = {
@@ -335,11 +335,8 @@ const App: React.FC = () => {
     const existingMedsList = medications.map(m => m.name);
     const result = await parseMedicationInstruction(aiInput, existingMedsList);
     
-    if (result) {
+    if (result && result.isValid !== false) { // Check isValid property
       const now = new Date();
-      // Use AI result but ensure time makes sense if not provided (default 8am next day?)
-      // For now, we assume immediate start if not specified
-      
       const newMed: Medication = {
         id: crypto.randomUUID(),
         name: result.name,
@@ -360,7 +357,7 @@ const App: React.FC = () => {
       setShowAiModal(false);
       setView('dashboard');
     } else {
-      alert("No entendí la instrucción. Intenta ser más claro.");
+      alert("No entendí la instrucción o no parece un medicamento válido.");
     }
     setIsAiLoading(false);
   };
@@ -372,21 +369,14 @@ const App: React.FC = () => {
     const freqVal = parseInt(newFreqVal) || 1;
     const invVal = parseInt(newInventory) || 0;
     
-    // FIX: Time Calculation Logic
-    const now = new Date();
     const [hours, minutes] = startTime.split(':').map(Number);
     const startDateTime = new Date();
     startDateTime.setHours(hours, minutes, 0, 0);
 
-    // If the time is later today, it's fine. 
-    // If the time is earlier today (e.g. now is 2pm, set to 8am), keep it as Today 8am.
-    // The UI will show it as "Due" immediately, allowing user to mark as taken or snooze.
-    // This is better than guessing "Tomorrow".
-    
     if (editingId) {
+      // Logic for editing (skip heavy AI validation if simply editing)
       setMedications(prev => prev.map(m => {
         if (m.id === editingId) {
-          // Reset next dose to the new preferred time TODAY
           const updatedNextDose = new Date();
           updatedNextDose.setHours(hours, minutes, 0, 0);
           
@@ -403,10 +393,16 @@ const App: React.FC = () => {
         return m;
       }));
     } else {
+      // Logic for NEW medication (Validate with AI)
       const existingMedsList = medications.map(m => m.name);
-      
-      // Use AI to correct name and get description even in manual mode
       const details = await analyzeMedicationDetails(newName, existingMedsList);
+
+      // RESTRICTION CHECK
+      if (details.isMedication === false) {
+        setIsManualLoading(false);
+        alert(`⚠️ No se pudo agregar:\n\n"${newName}" no parece ser un medicamento válido.\n\nMotivo: ${details.validationMessage || "Entrada no reconocida."}`);
+        return; // STOP EXECUTION
+      }
 
       const newMed: Medication = {
         id: crypto.randomUUID(),
@@ -628,7 +624,7 @@ const App: React.FC = () => {
                 className={`w-full p-4 rounded-xl outline-none focus:ring-2 transition-all ${theme.classes.card} ${theme.classes.cardBorder} border focus:ring-blue-500 ${theme.classes.textMain}`}
                 placeholder="Ej. Acetaminofén"
               />
-              {!editingId && newName.length > 3 && <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1"><Sparkles size={10}/> La IA completará los detalles al guardar.</p>}
+              {!editingId && newName.length > 3 && <p className="text-[10px] text-blue-500 mt-1 flex items-center gap-1"><Sparkles size={10}/> La IA comprobará si es válido.</p>}
             </div>
 
             <div>
@@ -693,7 +689,7 @@ const App: React.FC = () => {
 
         <div className={`pt-4 mt-auto pb-20 z-10 border-t backdrop-blur-md ${theme.classes.cardBorder}`}>
           <Button fullWidth type="submit" isLoading={isManualLoading} className={theme.id === 'cyber' ? 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-cyan-500/20' : ''}>
-            {isManualLoading ? "Analizando y Guardando..." : "Guardar Medicamento"}
+            {isManualLoading ? "Validando y Guardando..." : "Guardar Medicamento"}
           </Button>
         </div>
       </form>

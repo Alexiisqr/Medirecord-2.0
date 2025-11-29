@@ -10,6 +10,11 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
+// Helper para limpiar respuestas de la IA que incluyen bloques de código markdown
+const cleanJson = (text: string) => {
+  return text.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+};
+
 export const parseMedicationInstruction = async (instruction: string, existingMeds: string[]) => {
   try {
     const existingList = existingMeds.length > 0 ? existingMeds.join(", ") : "Ninguno";
@@ -18,12 +23,13 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
       model: "gemini-2.5-flash",
       contents: `Analiza esta instrucción: "${instruction}". El paciente ya toma: [${existingList}].
       Si el nombre del medicamento está mal escrito, corrígelo al nombre genérico o comercial más probable.
-      Extrae datos y genera recomendaciones.`,
+      IMPORTANTE: Responde SOLO con el JSON raw, sin markdown.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            isValid: { type: Type.BOOLEAN, description: "True si es una instrucción válida sobre medicamentos. False si es texto sin sentido o no relacionado a salud." },
             name: { type: Type.STRING, description: "Nombre corregido y estandarizado del medicamento" },
             description: { type: Type.STRING, description: "Breve explicación (máx 15 palabras) de para qué sirve este medicamento." },
             dosage: { type: Type.STRING, description: "Dosis (ej: 500mg)" },
@@ -45,12 +51,13 @@ export const parseMedicationInstruction = async (instruction: string, existingMe
               required: ["food", "sideEffects", "interactions"]
             }
           },
-          required: ["name", "frequencyType", "advice"]
+          required: ["isValid", "name", "frequencyType", "advice"]
         }
       }
     });
 
-    return JSON.parse(response.text);
+    const parsed = JSON.parse(cleanJson(response.text));
+    return parsed;
   } catch (error) {
     console.error("Error parsing medication with Gemini:", error);
     return null;
@@ -64,14 +71,17 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `El usuario quiere agregar "${rawName}".
-      1. Corrige el nombre si tiene errores ortográficos o está incompleto (Ej: "ibupro" -> "Ibuprofeno").
-      2. Dame una descripción corta (para qué sirve).
-      3. Analiza riesgos con: [${existingList}].`,
+      1. Determina si "${rawName}" es un medicamento real, suplemento o insumo médico válido. Si es algo como "piedra", "carro", "frijol", marca isMedication como false.
+      2. Si es válido, corrige el nombre y da detalles.
+      3. Analiza riesgos con: [${existingList}].
+      IMPORTANTE: Responde SOLO con el JSON raw, sin markdown.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            isMedication: { type: Type.BOOLEAN, description: "Es TRUE si es un medicamento, vitamina o tratamiento real. FALSE si es una palabra aleatoria, comida o tontería." },
+            validationMessage: { type: Type.STRING, description: "Si no es medicamento, explica por qué brevemente. Ej: 'Una piedra no se puede recetar'." },
             correctedName: { type: Type.STRING, description: "Nombre oficial/correcto del medicamento" },
             description: { type: Type.STRING, description: "Explicación sencilla de su uso (Máx 12 palabras)" },
             advice: {
@@ -84,15 +94,19 @@ export const analyzeMedicationDetails = async (rawName: string, existingMeds: st
               required: ["food", "sideEffects", "interactions"]
             }
           },
-          required: ["correctedName", "description", "advice"]
+          required: ["isMedication", "correctedName", "description", "advice"]
         }
       }
     });
 
-    return JSON.parse(response.text);
+    const parsed = JSON.parse(cleanJson(response.text));
+    return parsed;
   } catch (error) {
     console.error("Error analyzing details:", error);
+    // Fallback error object but allowing pass-through if API fails heavily, 
+    // though in this case we return isMedication true to avoid blocking the user if API is down
     return {
+      isMedication: true, 
       correctedName: rawName,
       description: "Medicamento",
       advice: { food: "Consultar médico", sideEffects: "-", interactions: "-" }
