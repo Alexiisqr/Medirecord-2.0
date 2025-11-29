@@ -1,29 +1,34 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
+
+<head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>MediRecordatorio</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* Fix for mobile height ignoring address bar */
-      html, body {
-        height: 100dvh;
-        width: 100vw;
-        margin: 0;
-        padding: 0;
-        overscroll-behavior-y: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
+        /* Fix for mobile height ignoring address bar */
+        html,
+        body {
+            height: 100dvh;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+            overscroll-behavior-y: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
     </style>
-  <script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react": "https://aistudiocdn.com/react@^19.2.0",
@@ -37,10 +42,11 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gray-50 text-slate-800 overflow-hidden selection:bg-blue-200">
+
+<body class="bg-gray-50 text-slate-800 overflow-hidden selection:bg-blue-200">
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/index.tsx"></script>
-  </body>
+</body>
+
 </html>
