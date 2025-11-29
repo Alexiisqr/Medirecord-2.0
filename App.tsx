@@ -4,7 +4,7 @@ import { Navigation } from './components/Navigation';
 import { MedicationCard } from './components/MedicationCard';
 import { Button } from './components/Button';
 import { parseMedicationInstruction, analyzeHistory, analyzeMedicationDetails } from './services/geminiService';
-import { Sparkles, X, Search, Bell, History, CheckCircle2, Share2, HeartPulse, Palette, Clock, Trophy, Flame, Lock, Unlock, Zap } from 'lucide-react';
+import { Sparkles, X, Search, Bell, History, CheckCircle2, Share2, HeartPulse, Palette, Clock, Trophy, Flame, Lock, Unlock, Zap, Download } from 'lucide-react';
 
 // THEMES CONFIGURATION
 const THEMES: Record<string, Theme> = {
@@ -126,6 +126,7 @@ const App: React.FC = () => {
 
   // Notification State
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
   const lastCheckRef = useRef<number>(Date.now());
 
   // Persistence
@@ -135,42 +136,75 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('userStats', JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem('unlockedThemes', JSON.stringify(unlockedThemes)); }, [unlockedThemes]);
 
+  // Handle Install Prompt
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
   // Notifications Logic
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-        setNotificationsEnabled(true);
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+         setNotificationsEnabled(true);
+      }
     }
+
     const checkInterval = setInterval(() => {
       if (Notification.permission === 'granted') checkDueMedications();
-    }, 60000);
+    }, 30000); // Check every 30s
     return () => clearInterval(checkInterval);
   }, [medications]);
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) return alert("Tu navegador no soporta notificaciones.");
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      setNotificationsEnabled(true);
-      new Notification("MediRecordatorio", { body: "¡Configurado! Te avisaremos a tiempo.", icon: "/pwa-192x192.png" });
+    
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setNotificationsEnabled(true);
+        new Notification("MediRecordatorio", { 
+          body: "¡Configurado! Mantén la app en segundo plano para recibir alertas.", 
+          icon: "/icon.svg" 
+        });
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
   const checkDueMedications = () => {
     const now = new Date();
-    if (Date.now() - lastCheckRef.current < 50000) return;
-    lastCheckRef.current = Date.now();
-
+    // Simple debounce to prevent double triggers in same minute
+    if (Date.now() - lastCheckRef.current < 20000) return;
+    
     medications.forEach(med => {
       if (med.nextDose) {
         const doseTime = new Date(med.nextDose);
-        if (doseTime <= now) {
-             new Notification(`Hora de tu medicamento`, {
-                body: `Es hora de tomar: ${med.name}`,
-                tag: med.id 
+        // Check if dose is due within last minute or future 1 minute
+        const diff = doseTime.getTime() - now.getTime();
+        if (Math.abs(diff) < 60000) { 
+             lastCheckRef.current = Date.now();
+             new Notification(`¡Hora de tu medicina!`, {
+                body: `Toma: ${med.name} (${med.dosage})`,
+                icon: "/icon.svg",
+                tag: med.id,
+                requireInteraction: true
              });
         }
       }
     });
+  };
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setInstallPrompt(null);
   };
 
   // CORE LOGIC
@@ -436,6 +470,14 @@ const App: React.FC = () => {
       <header className="flex justify-between items-center">
         <Logo />
         <div className="flex gap-2">
+           {installPrompt && (
+              <button 
+                onClick={handleInstallClick}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-600 text-white shadow-lg animate-pulse"
+              >
+                <Download size={14} /> Instalar
+              </button>
+           )}
            <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold ${theme.classes.card} border ${theme.classes.cardBorder} shadow-sm`}>
               <Flame size={14} className="text-orange-500 fill-orange-500 animate-pulse" />
               <span className={theme.classes.textMain}>{stats.streakDays}</span>
