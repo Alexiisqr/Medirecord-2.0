@@ -30,13 +30,13 @@ const App: React.FC = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   
-  // Manual Form State
+  // Manual Form State - Strings to avoid "0" input issues
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newDosage, setNewDosage] = useState('');
   const [newFreqType, setNewFreqType] = useState<FrequencyType>(FrequencyType.DAILY);
-  const [newFreqVal, setNewFreqVal] = useState(1);
-  const [newInventory, setNewInventory] = useState(30);
+  const [newFreqVal, setNewFreqVal] = useState('1'); 
+  const [newInventory, setNewInventory] = useState('30');
   const [isManualLoading, setIsManualLoading] = useState(false);
 
   // Analysis State
@@ -176,8 +176,8 @@ const App: React.FC = () => {
     setNewName(med.name);
     setNewDosage(med.dosage);
     setNewFreqType(med.frequencyType);
-    setNewFreqVal(med.frequencyValue);
-    setNewInventory(med.inventory ?? 30);
+    setNewFreqVal(med.frequencyValue.toString());
+    setNewInventory((med.inventory ?? 30).toString());
     setView('add');
   };
 
@@ -185,8 +185,8 @@ const App: React.FC = () => {
     setNewName('');
     setNewDosage('');
     setNewFreqType(FrequencyType.DAILY);
-    setNewFreqVal(1);
-    setNewInventory(30);
+    setNewFreqVal('1');
+    setNewInventory('30');
     setEditingId(null);
   };
 
@@ -233,6 +233,9 @@ const App: React.FC = () => {
     e.preventDefault();
     setIsManualLoading(true);
 
+    const freqVal = parseInt(newFreqVal) || 1;
+    const invVal = parseInt(newInventory) || 0;
+
     if (editingId) {
       // Edit Mode
       setMedications(prev => prev.map(m => {
@@ -242,8 +245,8 @@ const App: React.FC = () => {
             name: newName,
             dosage: newDosage,
             frequencyType: newFreqType,
-            frequencyValue: newFreqVal,
-            inventory: newInventory
+            frequencyValue: freqVal,
+            inventory: invVal
             // We keep existing advice and nextDose/icon/color
           };
         }
@@ -260,13 +263,13 @@ const App: React.FC = () => {
         name: newName,
         dosage: newDosage,
         frequencyType: newFreqType,
-        frequencyValue: newFreqVal,
+        frequencyValue: freqVal,
         startDate: new Date().toISOString(),
         nextDose: new Date().toISOString(),
         color: COLORS[Math.floor(Math.random() * COLORS.length)],
         icon: 'pill',
         advice: advice,
-        inventory: newInventory
+        inventory: invVal
       };
       setMedications([...medications, newMed]);
     }
@@ -316,7 +319,7 @@ Este reporte fue generado automáticamente.`;
 
   // Views
   const renderDashboard = () => (
-    <div className="pb-24 pt-6 px-4 space-y-6">
+    <div className="pb-32 pt-6 px-4 space-y-6">
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Hola! 👋</h1>
@@ -372,8 +375,8 @@ Este reporte fue generado automáticamente.`;
   );
 
   const renderAdd = () => (
-    <div className="pb-24 pt-6 px-4 h-full flex flex-col">
-       <header className="flex justify-between items-center mb-6">
+    <div className="pb-8 pt-6 px-4 h-full flex flex-col">
+       <header className="flex justify-between items-center mb-6 shrink-0">
         <h1 className="text-2xl font-bold text-slate-800">{editingId ? 'Editar Medicamento' : 'Nuevo Medicamento'}</h1>
         <button onClick={() => { resetForm(); setView('dashboard'); }} className="p-2 bg-slate-100 rounded-full">
           <X size={20} />
@@ -384,7 +387,7 @@ Este reporte fue generado automáticamente.`;
       {!editingId && (
         <button 
           onClick={() => setShowAiModal(true)}
-          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white p-4 rounded-2xl flex items-center justify-between mb-8 shadow-lg shadow-violet-200 group transition-all active:scale-[0.98]"
+          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white p-4 rounded-2xl flex items-center justify-between mb-8 shadow-lg shadow-violet-200 group transition-all active:scale-[0.98] shrink-0"
         >
           <div className="text-left">
             <span className="flex items-center gap-2 font-bold text-lg"><Sparkles size={18} /> Añadir con IA</span>
@@ -396,73 +399,80 @@ Este reporte fue generado automáticamente.`;
         </button>
       )}
       
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4 mb-6 shrink-0">
         <div className="h-px bg-slate-200 flex-1"></div>
         <span className="text-slate-400 text-sm font-medium">{editingId ? 'Datos del medicamento' : 'O manual'}</span>
         <div className="h-px bg-slate-200 flex-1"></div>
       </div>
 
-      <form onSubmit={handleManualAdd} className="space-y-5 flex-1 overflow-y-auto">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Nombre del medicamento</label>
-          <input 
-            required
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            placeholder="Ej. Ibuprofeno"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Dosis (Opcional)</label>
-          <input 
-            value={newDosage}
-            onChange={e => setNewDosage(e.target.value)}
-            className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            placeholder="Ej. 500mg"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+      <form onSubmit={handleManualAdd} className="flex flex-col flex-1 overflow-hidden">
+        <div className="space-y-5 flex-1 overflow-y-auto pr-1 pb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Frecuencia</label>
-            <select 
-              value={newFreqType}
-              onChange={e => setNewFreqType(e.target.value as FrequencyType)}
-              className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none"
-            >
-              <option value={FrequencyType.HOURLY}>Horas</option>
-              <option value={FrequencyType.DAILY}>Días</option>
-              <option value={FrequencyType.WEEKLY}>Semanas</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Cada cuanto</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nombre del medicamento</label>
             <input 
-              type="number"
-              min="1"
-              value={newFreqVal}
-              onChange={e => setNewFreqVal(Number(e.target.value))}
-              className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none"
+              required
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+              placeholder="Ej. Ibuprofeno"
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Dosis (Opcional)</label>
+            <input 
+              value={newDosage}
+              onChange={e => setNewDosage(e.target.value)}
+              className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+              placeholder="Ej. 500mg"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Frecuencia</label>
+              <select 
+                value={newFreqType}
+                onChange={e => setNewFreqType(e.target.value as FrequencyType)}
+                className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none"
+              >
+                <option value={FrequencyType.HOURLY}>Horas</option>
+                <option value={FrequencyType.DAILY}>Días</option>
+                <option value={FrequencyType.WEEKLY}>Semanas</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Cada cuanto</label>
+              <input 
+                type="number"
+                min="1"
+                inputMode="numeric"
+                value={newFreqVal}
+                onChange={e => setNewFreqVal(e.target.value)}
+                className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Inventory Field */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Stock Actual (Pastillas)</label>
+            <input 
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={newInventory}
+              onChange={e => setNewInventory(e.target.value)}
+              className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none"
+              placeholder="Ej. 30"
+            />
+          </div>
+          
+          {/* Spacer to prevent content being hidden behind keyboard/bottom area */}
+          <div className="h-32"></div>
         </div>
 
-        {/* Inventory Field */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Stock Actual (Pastillas)</label>
-          <input 
-            type="number"
-            min="0"
-            value={newInventory}
-            onChange={e => setNewInventory(Number(e.target.value))}
-            className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none"
-            placeholder="Ej. 30"
-          />
-        </div>
-
-        <div className="pt-4">
+        <div className="pt-4 mt-auto pb-20 bg-gray-50/90 backdrop-blur-sm z-10 border-t border-slate-100">
           <Button fullWidth type="submit" isLoading={isManualLoading}>
             {isManualLoading ? "Procesando..." : (editingId ? "Guardar Cambios" : "Guardar Medicamento")}
           </Button>
@@ -479,7 +489,7 @@ Este reporte fue generado automáticamente.`;
   );
 
   const renderProfile = () => (
-    <div className="pb-24 pt-6 px-4">
+    <div className="pb-32 pt-6 px-4">
       <header className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Historial</h1>
         <button 
@@ -554,17 +564,19 @@ Este reporte fue generado automáticamente.`;
   );
 
   return (
-    <div className="h-full w-full max-w-md mx-auto bg-gray-50 flex flex-col relative shadow-2xl overflow-hidden">
+    <div className="h-[100dvh] w-full max-w-md mx-auto bg-gray-50 flex flex-col relative shadow-2xl overflow-hidden">
       
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto no-scrollbar scroll-smooth">
-        {view === 'dashboard' && renderDashboard()}
-        {view === 'add' && renderAdd()}
-        {view === 'profile' && renderProfile()}
+      <main className="flex-1 overflow-hidden relative">
+        <div className="h-full overflow-y-auto no-scrollbar scroll-smooth">
+          {view === 'dashboard' && renderDashboard()}
+          {view === 'add' && renderAdd()}
+          {view === 'profile' && renderProfile()}
+        </div>
       </main>
 
       {/* Bottom Nav */}
-      <div className="absolute bottom-0 w-full">
+      <div className="absolute bottom-0 w-full z-50">
         <Navigation currentView={view} onChangeView={setView} />
       </div>
 
