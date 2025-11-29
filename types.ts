@@ -6,47 +6,31 @@ export enum FrequencyType {
 }
 
 export interface MedicationAdvice {
-  food: string;
-  sideEffects: string;
-  interactions: string;
+  food: string; // Instructions regarding food (e.g., after meals)
+  sideEffects: string; // Common side effects
+  interactions: string; // Warnings about interactions with existing meds
 }
 
 export interface Medication {
   id: string;
   name: string;
-  description?: string; // Nuevo campo para "Para qué sirve"
   dosage: string;
   frequencyType: FrequencyType;
-  frequencyValue: number;
+  frequencyValue: number; // e.g., every 8 (hours), 1 (time a day)
   notes?: string;
-  startDate: string; // ISO string containing the PREFERRED time
+  startDate: string; // ISO string
   nextDose?: string; // ISO string
   color: string;
   icon: string;
-  advice?: MedicationAdvice;
-  inventory?: number;
+  advice?: MedicationAdvice; // New field for AI recommendations
+  inventory?: number; // Number of pills left
 }
 
 export interface HistoryLog {
   id: string;
   medicationName: string;
-  takenAt: string;
+  takenAt: string; // ISO string
   status: 'taken' | 'skipped';
-  pointsEarned?: number;
-}
-
-export interface UserProfile {
-  xp: number;
-  level: number;
-  streakDays: number;
-  lastActiveDate: string; // ISO date only (YYYY-MM-DD)
-  achievements: string[];
-}
-
-export interface AICorrectionResult {
-  correctedName: string;
-  description: string;
-  advice: MedicationAdvice;
 }
 
 export interface AIAnalysisResult {
@@ -55,22 +39,6 @@ export interface AIAnalysisResult {
   suggestedFrequencyValue?: number;
   info?: string;
   suggestedInventory?: number;
-  description?: string;
 }
 
-export type View = 'dashboard' | 'add' | 'profile' | 'settings' | 'achievements';
-
-export interface Theme {
-  id: string;
-  name: string;
-  classes: {
-    bg: string;
-    textMain: string;
-    textSec: string;
-    card: string;
-    cardBorder: string;
-    primary: string;
-    accent: string;
-    nav: string;
-  };
-}
+export type View = 'dashboard' | 'add' | 'profile';
